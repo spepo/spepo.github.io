@@ -1,25 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<link rel="alternate"
-      type="application/rss+xml"
-      href="https://spepo.github.io/rss.xml"
-      title="RSS feed for https://spepo.github.io/">
-<title>My Emacs Blog</title>
-<meta name="author" content="Peter Povinec">
-<meta name="referrer" content="no-referrer">
-<meta name="viewport" content="initial-scale=1,width=device-width,minimum-scale=1">
-<link href= "static/style.css" rel="stylesheet" type="text/css" /> 
-<link rel="icon" href="static/favicon.ico"></head>
-<body>
-<div id="preamble" class="status"><div class="header">
-  <a href="https://spepo.github.io">My Emacs Blog</a>
-</div></div>
-<div id="content">
-<h1> Welcome to my Emacs blog </h1>
-
-<div class="post-date">18 Feb 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-02-18-speed-dial-your-favorite-files.html">Speed Dialing Your Favorite Files</a></h1>
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+<title><![CDATA[My Emacs Blog]]></title>
+<description><![CDATA[My Emacs Blog]]></description>
+<link>https://spepo.github.io/</link>
+<lastBuildDate>Sun, 16 Feb 2025 12:16:39 -0800</lastBuildDate>
+<item>
+  <title><![CDATA[Speed Dialing Your Favorite Files]]></title>
+  <description><![CDATA[
 <p>
 I may be dating myself, but I vividly remember setting up speed dials for my most frequently called numbers on my AT&amp;T landline phone. In the early '90s, you could store a phone number in a numbered memory slot (referred to as "programming") and later dial your grandma, for example, by pressing <code>SPD+2</code>. Retro is in&#x2014;so if you're too young to remember that and want to know more, just ask your favorite LLM chatbot to fill you in.
 </p>
@@ -124,16 +112,11 @@ Enjoy the malleability of Emacs and the freedom it gives you!
 <p>
 Discuss this post on <a href="https://www.reddit.com/r/emacs/comments/TBD/speed_dialing_your_favorite_files/">Reddit</a>.
 </p>
-<div class="taglist"><a href="https://spepo.github.io/tags.html">Tags</a>: <a href="https://spepo.github.io/tag-emacs.html">emacs</a> </div><div id="archive">
-<a href="https://spepo.github.io/archive.html">Other posts</a>
-</div>
-</div>
-<div id="postamble" class="status"><div id="archive">
-  <a href="https://spepo.github.io/archive.html">Other posts</a>
-</div>
-<center><small>
-    &copy; 2025 Peter Povinec. This work is licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="license noopener noreferrer"
-style="display: inline-flex; align-items: center;"> CC BY-SA 4.0<img style="height:22px!important;margin-left:3px;vertical-align:text-bottom;" src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt=""><img style="height:22px!important;margin-left:3px;vertical-align:text-bottom;" src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt=""><img style="height:22px!important;margin-left:3px;vertical-align:text-bottom;" src="https://mirrors.creativecommons.org/presskit/icons/sa.svg" alt=""></a>
-    </small></center></div>
-</body>
-</html>
+<div class="taglist"><a href="https://spepo.github.io/tags.html">Tags</a>: <a href="https://spepo.github.io/tag-emacs.html">emacs</a> </div>]]></description>
+  <category><![CDATA[emacs]]></category>
+  <link>https://spepo.github.io/2025-02-18-speed-dial-your-favorite-files.html</link>
+  <guid>https://spepo.github.io/2025-02-18-speed-dial-your-favorite-files.html</guid>
+  <pubDate>Tue, 18 Feb 2025 10:46:00 -0800</pubDate>
+</item>
+</channel>
+</rss>
