@@ -19,6 +19,205 @@
 <div id="content">
 <h1> Welcome to my Emacs blog </h1>
 
+<div class="post-date">29 Mar 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-03-29-the-tab-key-in-org-mode-reimagined.html">The TAB Key in Org Mode, Reimagined</a></h1>
+<p>
+I don't know about you, but when I'm reading something in an Org file and spot a link I want to follow, I instinctively press <code>TAB</code> to jump to it&#x2014;just like I would in an Info or Help buffer. Using <code>TAB</code> for such field navigation is a common pattern across many applications, including Emacs.  It’s also nicely symmetric with Shift-TAB (<code>S-TAB</code>), which typically navigates backward. But in Org mode, <code>TAB</code> triggers local visibility cycling: folding and unfolding text under the current headline. <code>S-TAB</code> cycles visibility globally, folding and unfolding all the headlines. (Granted, if you don’t use Info or navigate Help buffers with <code>TAB</code>, you might not miss that behavior in Org mode.)
+</p>
+
+<p>
+See, we have this dichotomy in Org mode: it's both an authoring tool and a task/notes manager. For document authoring, Org markup serves as a source format that's later exported for publishing. In this context, visibility cycling is essential for managing structure and reducing distractions while writing.  As a task and notes manager, Org is used to track notes, TODO lists, schedules, and data&#x2014;content that's often read in place and never exported. Visibility cycling still helps, but it's generally less critical than in authoring mode.
+</p>
+
+<p>
+This reading workflow within Org files makes me long for features found in more reading-focused modes. Sure, I don’t treat my Org files as read-only; reading and editing are fluidly intertwined. Still, when I'm focused on reading, I want the <code>TAB</code> key to handle navigation, not headline visibility cycling. And I don't want to switch to another mode like View mode just to get a better reading experience.
+</p>
+
+<p>
+It's well known that the <code>TAB</code> key is heavily overloaded in Emacs, especially in Org mode. Depending on context and configuration, it can perform one of four types of actions: line indentation, candidate completion (during editing), or field navigation and visibility cycling (during reading). As mentioned earlier, <code>TAB</code> is commonly used for field navigation in Info and Help modes. But note that even Org mode uses it this way within tables. Its association with visibility cycling was unique to Org mode until recently, when it was made an option in Outline mode too.
+</p>
+
+<p>
+Personally, I want to move in the opposite direction: removing visibility cycling from the list of <code>TAB</code>-triggered actions. Three types of behavior are already plenty. I'd rather assign visibility control to a more complex keybinding and prioritize field navigation instead. I'm not a big fan of cycling in general (see <a href="https://spepo.github.io/2025-02-18-speed-dial-your-favorite-files.html">my previous blog post</a>), and would prefer to jump directly to specific folding levels. I also value consistency in keybindings, so unifying <code>TAB</code> behavior across modes is important to me.
+</p>
+
+<blockquote>
+<p>
+<code>TAB</code>: indentation and completion when editing; field navigation when reading
+</p>
+</blockquote>
+
+<p>
+I decided to give it a try and remap <code>TAB</code> in Org mode to primarily perform field navigation. What exactly is considered a “field” is largely up to the user. In general, it should be a structural element in a file where a non-trivial action can be performed, making it useful to have an easy way to jump between them.  For my setup, I chose to treat only links and headlines as fields, similar to how Info handles navigation. Of course, others might include property drawers, code blocks, custom buttons, or other interactive elements. I wouldn't overdo it though&#x2014;too many fields and <code>TAB</code> navigation loses its utility.
+</p>
+
+<p>
+I remapped <code>TAB</code> in Org mode to navigate to the next visible heading or link, and <code>S-TAB</code> to move to the previous one. Headlines and links inside folded sections are skipped. For visibility cycling, I now rely on Org Speed Keys (a built in feature of Org mode).
+</p>
+
+<p>
+Speed Keys let you trigger commands with a single keystroke when the point is at the beginning of a headline. They’re off by default but incredibly handy once enabled. A number of keys are predefined out of the box; for example, <code>c</code> is already mapped to <code>org-cycle</code>, which is what <code>TAB</code> normally does in Org mode.
+</p>
+
+<p>
+I’ve had Speed Keys enabled for ages (mainly using them for forward/backward headline navigation), but I had never used <code>c</code> for visibility cycling&#x2014;until now. And it gets even better: the combination of <code>TAB</code> / <code>S-TAB</code> to jump between fields, followed by a speed key at the headline, turns out to be quite powerful.
+</p>
+
+<p>
+What about the other actions <code>TAB</code> usually performs in Org files?  For now, I rely on <code>M-x org-cycle</code> when needed. The <code>org-cycle</code> command is quite sophisticated and can fall back to other <code>TAB</code> behaviors like indentation when appropriate.  That said, I’ve been using my custom <code>TAB</code> / <code>S-TAB</code> bindings for months now and haven’t run into any situations where I missed the default behavior.
+</p>
+
+<p>
+Want to give it a try? Here’s the code you can drop into your <code>init.el</code>:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-emacs-lisp">(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-next-visible-heading-or-link</span> (<span style="color: #005a5f; font-weight: bold;">&amp;optional</span> arg)
+  <span style="color: #2a486a; font-style: italic;">"Move to the next visible heading or link, whichever comes first.</span>
+<span style="color: #2a486a; font-style: italic;">With prefix ARG and the point on a heading(link): jump over subsequent</span>
+<span style="color: #2a486a; font-style: italic;">headings(links) to the next link(heading), respectively.  This is useful</span>
+<span style="color: #2a486a; font-style: italic;">to skip over a long series of consecutive headings(links)."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span> <span style="color: #2544bb;">"P"</span>)
+  (<span style="color: #5317ac; font-weight: bold;">let</span> ((next-heading (<span style="color: #5317ac; font-weight: bold;">save-excursion</span>
+                        (org-next-visible-heading 1)
+                        (<span style="color: #5317ac; font-weight: bold;">when</span> (org-at-heading-p) (point))))
+        (next-link (<span style="color: #5317ac; font-weight: bold;">save-excursion</span>
+                     (<span style="color: #5317ac; font-weight: bold;">when</span> (/org-next-visible-link) (point)))))
+    (<span style="color: #5317ac; font-weight: bold;">when</span> arg
+      (<span style="color: #5317ac; font-weight: bold;">if</span> (<span style="color: #5317ac; font-weight: bold;">and</span> (org-at-heading-p) next-link)
+          (<span style="color: #5317ac; font-weight: bold;">setq</span> next-heading nil)
+        (<span style="color: #5317ac; font-weight: bold;">if</span> (<span style="color: #5317ac; font-weight: bold;">and</span> (looking-at org-link-any-re) next-heading)
+            (<span style="color: #5317ac; font-weight: bold;">setq</span> next-link nil))))
+    (<span style="color: #5317ac; font-weight: bold;">cond</span>
+     ((<span style="color: #5317ac; font-weight: bold;">and</span> next-heading next-link) (goto-char (min next-heading next-link)))
+     (next-heading (goto-char next-heading))
+     (next-link (goto-char next-link)))))
+
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-previous-visible-heading-or-link</span> (<span style="color: #005a5f; font-weight: bold;">&amp;optional</span> arg)
+  <span style="color: #2a486a; font-style: italic;">"Move to the previous visible heading or link, whichever comes first.</span>
+<span style="color: #2a486a; font-style: italic;">With prefix ARG and the point on a heading(link): jump over subsequent</span>
+<span style="color: #2a486a; font-style: italic;">headings(links) to the previous link(heading), respectively.  This is useful</span>
+<span style="color: #2a486a; font-style: italic;">to skip over a long series of consecutive headings(links)."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span> <span style="color: #2544bb;">"P"</span>)
+  (<span style="color: #5317ac; font-weight: bold;">let</span> ((prev-heading (<span style="color: #5317ac; font-weight: bold;">save-excursion</span>
+                        (org-previous-visible-heading 1)
+                        (<span style="color: #5317ac; font-weight: bold;">when</span> (org-at-heading-p) (point))))
+        (prev-link (<span style="color: #5317ac; font-weight: bold;">save-excursion</span>
+                     (<span style="color: #5317ac; font-weight: bold;">when</span> (/org-next-visible-link t) (point)))))
+    (<span style="color: #5317ac; font-weight: bold;">when</span> arg
+      (<span style="color: #5317ac; font-weight: bold;">if</span> (<span style="color: #5317ac; font-weight: bold;">and</span> (org-at-heading-p) prev-link)
+          (<span style="color: #5317ac; font-weight: bold;">setq</span> prev-heading nil)
+        (<span style="color: #5317ac; font-weight: bold;">if</span> (<span style="color: #5317ac; font-weight: bold;">and</span> (looking-at org-link-any-re) prev-heading)
+            (<span style="color: #5317ac; font-weight: bold;">setq</span> prev-link nil))))
+    (<span style="color: #5317ac; font-weight: bold;">cond</span>
+     ((<span style="color: #5317ac; font-weight: bold;">and</span> prev-heading prev-link) (goto-char (max prev-heading prev-link)))
+     (prev-heading (goto-char prev-heading))
+     (prev-link (goto-char prev-link)))))
+
+<span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Adapted from org-next-link to only consider visible links</span>
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-next-visible-link</span> (<span style="color: #005a5f; font-weight: bold;">&amp;optional</span> search-backward)
+  <span style="color: #2a486a; font-style: italic;">"Move forward to the next visible link.</span>
+<span style="color: #2a486a; font-style: italic;">When SEARCH-BACKWARD is non-nil, move backward."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span>)
+  (<span style="color: #5317ac; font-weight: bold;">let</span> ((pos (point))
+        (search-fun (<span style="color: #5317ac; font-weight: bold;">if</span> search-backward #'re-search-backward
+                      #'re-search-forward)))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Tweak initial position: make sure we do not match current link.</span>
+    (<span style="color: #5317ac; font-weight: bold;">cond</span>
+     ((<span style="color: #5317ac; font-weight: bold;">and</span> (not search-backward) (looking-at org-link-any-re))
+      (goto-char (match-end 0)))
+     (search-backward
+      (<span style="color: #5317ac; font-weight: bold;">pcase</span> (org-in-regexp org-link-any-re nil t)
+        (`(,beg . ,_) (goto-char beg)))))
+    (<span style="color: #5317ac; font-weight: bold;">catch</span> <span style="color: #0000c0;">:found</span>
+      (<span style="color: #5317ac; font-weight: bold;">while</span> (funcall search-fun org-link-any-re nil t)
+        (<span style="color: #5317ac; font-weight: bold;">let</span> ((folded (org-invisible-p nil t)))
+          (<span style="color: #5317ac; font-weight: bold;">when</span> (<span style="color: #5317ac; font-weight: bold;">or</span> (not folded) (eq folded 'org-link))
+            (<span style="color: #5317ac; font-weight: bold;">let</span> ((context (<span style="color: #5317ac; font-weight: bold;">save-excursion</span>
+                             (<span style="color: #5317ac; font-weight: bold;">unless</span> search-backward (forward-char -1))
+                             (org-element-context))))
+              (<span style="color: #5317ac; font-weight: bold;">pcase</span> (org-element-lineage context '(link) t)
+                (link
+                 (goto-char (org-element-property <span style="color: #8f0075; font-weight: bold;">:begin</span> link))
+                 (<span style="color: #5317ac; font-weight: bold;">throw</span> <span style="color: #0000c0;">:found</span> t)))))))
+      (goto-char pos)
+      <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">No further link found</span>
+      nil)))
+
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-shifttab</span> (<span style="color: #005a5f; font-weight: bold;">&amp;optional</span> arg)
+  <span style="color: #2a486a; font-style: italic;">"Move to the previous visible heading or link.</span>
+<span style="color: #2a486a; font-style: italic;">If already at a heading, move first to its beginning.  When inside a table,</span>
+<span style="color: #2a486a; font-style: italic;">move to the previous field."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span> <span style="color: #2544bb;">"P"</span>)
+  (<span style="color: #5317ac; font-weight: bold;">cond</span>
+   ((org-at-table-p) (call-interactively #'org-table-previous-field))
+   ((<span style="color: #5317ac; font-weight: bold;">and</span> (not (bolp)) (org-at-heading-p)) (beginning-of-line))
+   (t (call-interactively #'/org-previous-visible-heading-or-link))))
+
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-tab</span> (<span style="color: #005a5f; font-weight: bold;">&amp;optional</span> arg)
+  <span style="color: #2a486a; font-style: italic;">"Move to the next visible heading or link.</span>
+<span style="color: #2a486a; font-style: italic;">When inside a table, re-align the table and move to the next field."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span>)
+  (<span style="color: #5317ac; font-weight: bold;">cond</span>
+   ((org-at-table-p) (org-table-justify-field-maybe)
+    (call-interactively #'org-table-next-field))
+   (t (call-interactively #'/org-next-visible-heading-or-link))))
+
+(<span style="color: #5317ac; font-weight: bold;">use-package</span> <span style="color: #0000c0;">org</span>
+  <span style="color: #8f0075; font-weight: bold;">:config</span>
+  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">RET should follow link when possible (moves to next field in tables)</span>
+  (<span style="color: #5317ac; font-weight: bold;">setq</span> org-return-follows-link t)
+  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">must be at the beginning of a headline to use it; ? for help</span>
+  (<span style="color: #5317ac; font-weight: bold;">setq</span> org-use-speed-commands t)
+  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Customize some bindings</span>
+  (define-key org-mode-map (kbd <span style="color: #2544bb;">"&lt;tab&gt;"</span>) #'/org-tab)
+  (define-key org-mode-map (kbd <span style="color: #2544bb;">"&lt;backtab&gt;"</span>) #'/org-shifttab)
+  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Customize speed keys: modifying operations must be upper case</span>
+  (custom-set-variables
+   '(org-speed-commands
+     '((<span style="color: #2544bb;">"Outline Navigation and Visibility"</span>)
+       (<span style="color: #2544bb;">"n"</span> . (org-speed-move-safe 'org-next-visible-heading))
+       (<span style="color: #2544bb;">"p"</span> . (org-speed-move-safe 'org-previous-visible-heading))
+       (<span style="color: #2544bb;">"f"</span> . (org-speed-move-safe 'org-forward-heading-same-level))
+       (<span style="color: #2544bb;">"b"</span> . (org-speed-move-safe 'org-backward-heading-same-level))
+       (<span style="color: #2544bb;">"u"</span> . (org-speed-move-safe 'outline-up-heading))
+       (<span style="color: #2544bb;">"j"</span> . org-goto)
+       (<span style="color: #2544bb;">"c"</span> . org-cycle)
+       (<span style="color: #2544bb;">"C"</span> . org-shifttab)
+       (<span style="color: #2544bb;">" "</span> . org-display-outline-path)
+       (<span style="color: #2544bb;">"s"</span> . org-toggle-narrow-to-subtree)
+       (<span style="color: #2544bb;">"Editing"</span>)
+       (<span style="color: #2544bb;">"I"</span> . (<span style="color: #5317ac; font-weight: bold;">progn</span> (forward-char 1) (call-interactively 'org-insert-heading-respect-content)))
+       (<span style="color: #2544bb;">"^"</span> . org-sort)
+       (<span style="color: #2544bb;">"W"</span> . org-refile)
+       (<span style="color: #2544bb;">"@"</span> . org-mark-subtree)
+       (<span style="color: #2544bb;">"T"</span> . org-todo)
+       (<span style="color: #2544bb;">":"</span> . org-set-tags-command)
+       (<span style="color: #2544bb;">"Misc"</span>)
+       (<span style="color: #2544bb;">"?"</span> . org-speed-command-help))))
+  )
+</pre>
+</div>
+
+<p>
+A few comments about the code, for those interested:
+</p>
+<ol class="org-ol">
+<li>This is more of a proof-of-concept than optimized code ready for upstreaming.</li>
+<li>My <code>/org-next-visible-link</code> is a simplified version of the built-in <code>org-next-link</code>, tailored to the specific cases I care about. Honestly, I was surprised that <code>org-next-link</code> doesn’t already do what I need.  It jumps to the next link even if it’s inside a folded section, causing it to unfold. I have a hard time imagining why would anyone need that.</li>
+<li>In <code>/org-tab</code> and <code>/org-shifttab</code>, I preserved the default behavior of <code>org-cycle</code> within a table: it navigates between table fields.</li>
+<li>I’ve also customized <code>org-speed-commands</code> to only bind editing actions to keys that require the Shift modifier. I like keeping lowercase keys reserved for non-destructive commands. As a next step, I may remap Space and Shift-Space to scroll the buffer. That would bring me even closer to a more consistent reading experience.</li>
+</ol>
+
+<blockquote>
+<p>
+Enjoy the malleability of Emacs and the freedom it gives you!
+</p>
+</blockquote>
+
+<p>
+Discuss this post on <a href="https://www.reddit.com/r/emacs/comments/1jmroa6/the_tab_key_in_org_mode_reimagined/">Reddit</a>.
+</p>
+<div class="taglist"><a href="https://spepo.github.io/tags.html">Tags</a>: <a href="https://spepo.github.io/tag-emacs.html">emacs</a> </div>
 <div class="post-date">18 Feb 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-02-18-speed-dial-your-favorite-files.html">Speed Dialing Your Favorite Files</a></h1>
 <p>
 I may be dating myself, but I vividly remember setting up speed dials for my most frequently called numbers on my AT&amp;T landline phone. In the early '90s, you could store a phone number in a numbered memory slot (referred to as "programming") and later dial your grandma, for example, by pressing <code>SPD+2</code>. Retro is in&#x2014;so if you're too young to remember that and want to know more, just ask your favorite LLM chatbot to fill you in.
