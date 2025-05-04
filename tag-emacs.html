@@ -18,6 +18,237 @@
 </div></div>
 <div id="content">
 <h1 class="title">Posts tagged "emacs":</h1>
+<div class="post-date">30 Apr 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-04-30-towards-auto-generated-ert-unit-tests.html">Towards Auto-Generated ERT Unit Tests</a></h1>
+<p>
+Rigorous testing clearly benefits software projects, yet many Emacs Lisp packages have minimal tests. You might think manual testing during development is enough&#x2014;but that only works if the code never changes and has no evolving dependencies. Automated tests, however, give you the confidence to modify code without fear of unintentionally breaking functionality. They quickly catch issues caused by changing dependencies, and coverage tools highlight tested and untested functionality.
+</p>
+
+<p>
+Benefits aside, writing test cases can feel like a chore. As an enterprise software developer, I disliked it as much as anyone. But now, as I occasionally work on Emacs Lisp packages mostly for personal use, I'm finding that a lack of automated tests costs me valuable time. We've all experienced making seemingly harmless changes, only to discover obscure bugs weeks later that automated tests might have caught immediately.
+</p>
+
+<p>
+I want automated tests for my Emacs Lisp code&#x2014;whether it’s a published package or just a personal library of functions&#x2014;but I'd rather not write them manually. I've long dreamed of using LLMs to generate test cases. So, is this approach already viable, particularly for Emacs Lisp unit tests? Writing unit tests feels like an ideal scenario for current LLMs that may lack extensive Emacs Lisp training: unit tests are simpler than integration or performance tests, less sensitive to hallucinations, and easy to adjust or discard if problematic. 
+</p>
+
+<p>
+At this stage, I'm not aiming for a sleek Emacs integration.  I just want to see if the approach works. Using ChatGPT in a browser with some simple copy-pasting is enough. I started by asking ChatGPT (using the <code>o3-mini-high</code> and <code>4o</code> models) to help set up ERT tests for my personal library functions, loaded from my <code>init.el</code>. My goal was to run the tests externally, in batch mode, separate from my main Emacs instance.
+</p>
+
+<p>
+ChatGPT performed reasonably well. After a few iterations, partly due to peculiarities in my <code>init.el</code> configuration, I ended up with a test file containing a dummy test that I could successfully run externally using:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">emacs --batch -Q <span style="color: #2544bb;">\</span>
+      -l test/test-pp-lib.el <span style="color: #2544bb;">\</span>
+      -f ert-run-tests-batch-and-exit
+</pre>
+</div>
+
+<p>
+Next, I gave ChatGPT the code for my <code>/org-next-visible-link</code> function (see   <a href="https://spepo.github.io/2025-03-29-the-tab-key-in-org-mode-reimagined.html">my previous blog post</a>) and asked it to generate a complete suite of unit tests aimed at maximizing coverage. The generated tests looked reasonable, but several failed due to small, silly issues. Some failures were caused by missing double backslashes to properly escape <code>[</code> in <code>looking-at</code> patterns. Others were due to ChatGPT "misunderstanding" the behavior of the function: if point is already at the beginning of a link, <code>/org-next-visible-link</code> will skip to the next one. It was easy enough to fix these manually.
+</p>
+
+<p>
+However, one test kept failing. It involved text visibility, which is the core aspect that <code>/org-next-visible-link</code> is supposed to handle. I pasted the ERT error and backtrace into ChatGPT and asked it to find the problem. It claimed to have identified and fixed the issue, but the test failed again&#x2014;a common pattern when LLMs hallucinate fixes that don’t actually work.
+</p>
+
+<p>
+Next, I tried executing the test steps manually in a buffer. The test failed for me too! That’s when I realized the problem might not be in the test, but in my code. I asked ChatGPT to help me find the bug.  I gave it a big hint: during manual testing, I noticed the failure occurred in a specific corner case, when a link was inside a folded section with no text following it. I explained that adding any text after the link would make the test pass. What happened next was quite impressive.
+</p>
+
+<p>
+ChatGPT took its time performing its inference-based iterative reasoning. It spent about three minutes analyzing the function code, the test code, and the failed test backtrace. When it responded, it correctly identified a bug in my code, explained the underlying problem, and suggested a specific code change to fix it. I applied the fix, and the test passed.
+</p>
+
+<blockquote>
+<p>
+No more excuses: Every non-trivial function deserves a unit test.
+</p>
+</blockquote>
+
+<p>
+For completeness, here is the code of the function under test (with the fix), and the unit tests generated by ChatGPT.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-emacs-lisp"><span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Adapted from org-next-link to only consider visible links</span>
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-next-visible-link</span> (<span style="color: #005a5f; font-weight: bold;">&amp;optional</span> search-backward)
+  <span style="color: #2a486a; font-style: italic;">"Move forward to the next visible link.</span>
+<span style="color: #2a486a; font-style: italic;">When SEARCH-BACKWARD is non-nil, move backward."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span>)
+  (<span style="color: #5317ac; font-weight: bold;">let</span> ((pos (point))
+        (search-fun (<span style="color: #5317ac; font-weight: bold;">if</span> search-backward #'re-search-backward
+                      #'re-search-forward)))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Tweak initial position: make sure we do not match current link.</span>
+    (<span style="color: #5317ac; font-weight: bold;">cond</span>
+     ((<span style="color: #5317ac; font-weight: bold;">and</span> (not search-backward) (looking-at org-link-any-re))
+      (goto-char (match-end 0)))
+     (search-backward
+      (<span style="color: #5317ac; font-weight: bold;">pcase</span> (org-in-regexp org-link-any-re nil t)
+        (`(,beg . ,_) (goto-char beg)))))
+    (<span style="color: #5317ac; font-weight: bold;">catch</span> <span style="color: #0000c0;">:found</span>
+      (<span style="color: #5317ac; font-weight: bold;">while</span> (funcall search-fun org-link-any-re nil t)
+        (<span style="color: #5317ac; font-weight: bold;">let</span> ((folded (org-invisible-p (match-beginning 0) t)))
+          (<span style="color: #5317ac; font-weight: bold;">when</span> (<span style="color: #5317ac; font-weight: bold;">or</span> (not folded) (eq folded 'org-link))
+            (<span style="color: #5317ac; font-weight: bold;">let</span> ((context (<span style="color: #5317ac; font-weight: bold;">save-excursion</span>
+                             (<span style="color: #5317ac; font-weight: bold;">unless</span> search-backward (forward-char -1))
+                             (org-element-context))))
+              (<span style="color: #5317ac; font-weight: bold;">pcase</span> (org-element-lineage context '(link) t)
+                (link
+                 (goto-char (org-element-property <span style="color: #8f0075; font-weight: bold;">:begin</span> link))
+                 (<span style="color: #5317ac; font-weight: bold;">throw</span> <span style="color: #0000c0;">:found</span> t)))))))
+      (goto-char pos)
+      <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">No further link found</span>
+      nil)))
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-emacs-lisp"><span style="color: #505050; font-style: italic;">;;; </span><span style="color: #505050; font-style: italic;">test-pp-lib.el &#8212;&#8211;&#8211; tests for pp-lib.el</span>
+
+<span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Ensure test directory is on load-path so we can require test-helper</span>
+(add-to-list 'load-path (file-name-directory #$))
+
+(<span style="color: #5317ac; font-weight: bold;">require</span> '<span style="color: #0000c0;">test-helper</span>)
+(<span style="color: #5317ac; font-weight: bold;">require</span> '<span style="color: #0000c0;">ert</span>)
+(<span style="color: #5317ac; font-weight: bold;">require</span> '<span style="color: #0000c0;">org</span>)     <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">for org-mode, org-element, org-link-any-re</span>
+(<span style="color: #5317ac; font-weight: bold;">require</span> '<span style="color: #0000c0;">cl-lib</span>)  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">for cl-letf</span>
+
+<span style="color: #505050; font-style: italic;">;;; </span><span style="color: #505050; font-style: italic;">tests for `</span><span style="color: #0000c0; font-style: italic;">/org-next-visible-link</span><span style="color: #505050; font-style: italic;">'</span>
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-forward-basic</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Move to the first link in forward direction and return non-nil."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"foo [[A]] bar [[B]] baz"</span>)
+    (org-mode)
+    (goto-char (point-min))
+    (should (/org-next-visible-link))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">A\\</span><span style="color: #2544bb;">]\\]"</span>))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-forward-second-link</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Subsequent `</span><span style="color: #0000c0; font-style: italic;">org-next-visible-link</span><span style="color: #2a486a; font-style: italic;">' should find the next link."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"foo [[A]] bar [[B]] baz"</span>)
+    (org-mode)
+    (goto-char (point-min))
+    (/org-next-visible-link)
+    (should (/org-next-visible-link))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">B\\</span><span style="color: #2544bb;">]\\]"</span>))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-forward-skip-current</span> ()
+  <span style="color: #2a486a; font-style: italic;">"When point is at the beginning of a link, skip it and find the next."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"[[A]] [[B]]"</span>)
+    (org-mode)
+    (goto-char (point-min))
+    (should (/org-next-visible-link))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">B\\</span><span style="color: #2544bb;">]\\]"</span>))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-backward-basic</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Move backward to the nearest previous link and return non-nil."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"first [[A]] then [[B]] then [[C]]"</span>)
+    (org-mode)
+    (goto-char (point-max))
+    (should (/org-next-visible-link t))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">C\\</span><span style="color: #2544bb;">]\\]"</span>))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-backward-second-link</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Second backward invocation finds the prior link."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"[[A]] [[B]]"</span>)
+    (org-mode)
+    (goto-char (point-max))
+    (/org-next-visible-link t)
+    (should (/org-next-visible-link t))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">A\\</span><span style="color: #2544bb;">]\\]"</span>))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-backward-skip-current</span> ()
+  <span style="color: #2a486a; font-style: italic;">"When point is on a link, backward skips it and finds the previous."</span>  
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"[[X]] [[Y]]"</span>)
+    (org-mode)
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">position right at the beginning of Y</span>
+    (goto-char (point-min))
+    (/org-next-visible-link) <span style="color: #505050; font-style: italic;">; </span><span style="color: #505050; font-style: italic;">forward to [[X]]</span>
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">now move to Y</span>
+    (/org-next-visible-link)
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">test backward skip</span>
+    (goto-char (point))
+    (should (/org-next-visible-link t))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">X\\</span><span style="color: #2544bb;">]\\]"</span>))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-no-link</span> ()
+  <span style="color: #2a486a; font-style: italic;">"With no links, returns nil and point does not move."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"no links here"</span>)
+    (org-mode)
+    (goto-char (point-min))
+    (should-not (/org-next-visible-link))
+    (should (= (point) (point-min)))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-skip-in-folded-headline</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Skip links that reside in a folded headline body."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (org-mode)
+    (insert <span style="color: #2544bb;">"* Heading1\n[[SKIP]]\n* Heading2\n[[FIND]]\n"</span>)
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Fold the first subtree so its body (and the [[SKIP]] link) is hidden</span>
+    (goto-char (point-min))
+    (org-cycle)  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">this folds the subtree under Heading1</span>
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Now search forward: should skip [[SKIP]] and land on [[FIND]]</span>
+    (goto-char (point-min))
+    (should (/org-next-visible-link))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">FIND\\</span><span style="color: #2544bb;">]\\]"</span>))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">And then no more</span>
+    (should-not (/org-next-visible-link))))
+
+(<span style="color: #5317ac; font-weight: bold;">ert-deftest</span> <span style="color: #721045;">org-next-visible-link-allow-org-link-invisible</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Find links hidden with `</span><span style="color: #0000c0; font-style: italic;">invisible=</span><span style="color: #2a486a; font-style: italic;">'org-link` overlays."</span>
+  (<span style="color: #5317ac; font-weight: bold;">with-temp-buffer</span>
+    (insert <span style="color: #2544bb;">"foo [[HIDDEN]] [[VISIBLE]]"</span>)
+    (org-mode)
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">hide first link with 'org-link</span>
+    (goto-char (point-min))
+    (re-search-forward org-link-any-re)
+    (<span style="color: #5317ac; font-weight: bold;">let</span> ((ov (make-overlay (match-beginning 0) (match-end 0))))
+      (overlay-put ov 'invisible 'org-link))
+    (goto-char (point-min))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">should still hit HIDDEN first</span>
+    (should (/org-next-visible-link))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">HIDDEN\\</span><span style="color: #2544bb;">]\\]"</span>))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">then hit VISIBLE</span>
+    (should (/org-next-visible-link))
+    (should (looking-at <span style="color: #2544bb;">"\\[\\[</span><span style="color: #0000c0;">VISIBLE\\</span><span style="color: #2544bb;">]\\]"</span>))
+    (should-not (/org-next-visible-link))))
+
+<span style="color: #505050; font-style: italic;">;;; </span><span style="color: #505050; font-style: italic;">test-pp-lib.el ends here</span>
+</pre>
+</div>
+
+<p>
+Even with the current generation of ChatGPT models, I can confidently say they can be used to generate useful ERT unit tests. Is it perfect? Of course not. For example, the <code>org-next-visible-link-backward-skip-current</code> test contains a bug that, only by chance, doesn’t cause a failure. It also includes a useless <code>(goto-char (point))</code> call. Future LLMs will only get better: they’ll be able to fix or improve existing tests and generate new ones to increase code coverage. And tighter integration with Emacs, eventually reaching the point where tests are fully auto-generated, is just a matter of time.
+</p>
+
+<p>
+There's no need to wait, though. I am sure existing tools like <code>gptel.el</code> and <code>aider.el</code> could already be used to provide a tighter integration experience, if desired. Experimenting with other LLM providers and their models might also yield even better unit test generation results.
+</p>
+
+<p>
+Meanwhile, I'm off to work on improving my ERT setup to streamline running tests and debugging my code. From now on, all the Emacs Lisp code I work on will be accompanied by unit tests. I encourage you to do the same.
+</p>
+
+<blockquote>
+<p>
+Enjoy the malleability of Emacs and the freedom it gives you!
+</p>
+</blockquote>
+
+<p>
+Discuss this post on <a href="https://www.reddit.com/r/emacs/comments/1jmroa6/the_tab_key_in_org_mode_reimagined/">Reddit</a>.
+</p>
+<div class="taglist"><a href="https://spepo.github.io/tags.html">Tags</a>: <a href="https://spepo.github.io/tag-emacs.html">emacs</a> </div>
 <div class="post-date">29 Mar 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-03-29-the-tab-key-in-org-mode-reimagined.html">The TAB Key in Org Mode, Reimagined</a></h1>
 <p>
 I don't know about you, but when I'm reading something in an Org file and spot a link I want to follow, I instinctively press <code>TAB</code> to jump to it&#x2014;just like I would in an Info or Help buffer. Using <code>TAB</code> for such field navigation is a common pattern across many applications, including Emacs.  It’s also nicely symmetric with Shift-TAB (<code>S-TAB</code>), which typically navigates backward. But in Org mode, <code>TAB</code> triggers local visibility cycling: folding and unfolding text under the current headline. <code>S-TAB</code> cycles visibility globally, folding and unfolding all the headlines. (Granted, if you don’t use Info or navigate Help buffers with <code>TAB</code>, you might not miss that behavior in Org mode.)
