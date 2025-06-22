@@ -18,6 +18,243 @@
 </div></div>
 <div id="content">
 <h1 class="title">Posts tagged "emacs":</h1>
+<div class="post-date">22 Jun 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-06-22-fault-tolerant-org-links.html">Fault-tolerant Org Links</a></h1>
+<p>
+I’m sure many Org users have experienced this: you reorganize your notes, maybe renaming a file or moving a section to a different Org file, and a few weeks later you open a link in another note only to be greeted by an unexpected prompt: <i>“No match - create this as a new heading?”</i>. Org tries to be helpful, even creating a new buffer for the non-existent file, assuming all along that you are creating a wiki and normally insert in your text links to targets that don't exist yet. But what if that is not your use-case? What if, instead of popping a new buffer and disrupting your flow, you want to be told that you got a broken link (knowing full well that the link target exists somewhere)? Then you can utter an expletive and carry on reading whatever you were reading, or try to find the intended target and fix the link.
+</p>
+
+<p>
+Broken Org links are an unfortunate fact of life when your files and headings change over time. In my case, I kept stumbling on dead links in my org notes that have been curated for decades and survived multiple moves between cloud storage providers, note management systems (remember <code>remember.el</code>?), and other reorgs. I am not a big fan of spending a lot of time migrating my files and rewiring everything proactively. I wished for an Org setup that would detect a broken link and fix it right there and then, as I tried to follow it. In a sense, I wished for Org links to be fault-tolerant. At the same time, I didn't want a heavy solution, with its own consistency and maintenance burden, like globally unique Org Ids or a custom database.
+</p>
+
+<p>
+I created a small set of tools to help detect and repair broken links in my Org files on the fly. My <code>Org Link Repair</code> code consists of three little helpers:
+</p>
+<ul class="org-ul">
+<li>A checker hook <code>/org-test-file-link</code> that intercepts broken links before Org tries to apply its built-in 'nonexistent target' logic.</li>
+<li>A transient menu <code>/olr-transient</code> to provide a quick interface for automated and manual broken link recovery tasks.</li>
+<li>An interactive repair mode <code>/olr-manual-mode</code> that guides a user through fixing broken links one by one.</li>
+</ul>
+<p>
+Together, these additions make it much easier to stay on top of link rot in my notes without altering how I normally create and use Org links. Let’s look at each part and how they work together in practice.
+</p>
+
+<p>
+A side note on the UX: One of my design goals was to guide the user to perform the needed actions without relying on their familiarity with <code>Org Link Repair</code> flow. I expect this flow to be exercised rarely enough that even a user who has done it before is not expected to remember key bindings or the steps to repair their broken link. The code should try to make the process seamless and straightforward.
+</p>
+
+<p>
+The helpers that I show are meant as a starting point and can be adapted or extended. I implemented detection of broken file links and a manual (user-assisted) repair strategy, because file links were the ones breaking for me and the manual strategy is the most general (the correct target file may be in an abandoned Google drive, an encrypted file bundle, or anywhere). Other link types could be tested and different repair strategies could be implemented, including a fully automated strategy, if the likely target file location is known, or can be easily searched for. Even web links could be handled similarly: detect broken links to web pages that have disappeared, and rewrite them to use a web archive (like the Wayback machine).
+</p>
+
+<blockquote>
+<p>
+If you can’t prevent links from breaking, at least make them easy to find and fix.
+</p>
+</blockquote>
+
+<div id="outline-container-orgba23406" class="outline-2">
+<h2 id="orgba23406">Catching Broken Links</h2>
+<div class="outline-text-2" id="text-orgba23406">
+<p>
+The first thing to do is to change the value of <code>org-link-search-must-match-exact-headline</code> from its default setting of <code>query-to-create</code>. That eliminates the wiki-centric query to create a new heading when following a broken link. But it doesn't prevent Org from popping a new buffer for a link pointing to a nonexistent file name. To suppress that, we need to do a bit more work.
+</p>
+
+<p>
+Luckily Org developers provided the <code>org-open-at-point-functions</code> hook which  makes it straightforward to intercept the link opening flow and detect a broken link due to non-existent file early. Here is my interceptor that checks for broken file links and bails out with a user error on non-existent files.  It could be expanded to handle other link types and other broken link scenarios. Note that the error message tells the user what key binding to use to initiate the link repair.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-emacs-lisp">(custom-set-variables '(org-link-search-must-match-exact-headline t))
+
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/org-test-file-link</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Check if the file link target file exists before following it."</span>
+  (<span style="color: #5317ac; font-weight: bold;">let</span> ((ctx (org-element-context)))
+    (<span style="color: #5317ac; font-weight: bold;">when</span> (<span style="color: #5317ac; font-weight: bold;">and</span> (eq (org-element-type ctx) 'link)
+               (string= (org-element-property <span style="color: #8f0075; font-weight: bold;">:type</span> ctx) <span style="color: #2544bb;">"file"</span>))
+      (<span style="color: #5317ac; font-weight: bold;">let</span> ((file (org-element-property <span style="color: #8f0075; font-weight: bold;">:path</span> ctx)))
+        <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">If the file exists, return nil to let org-open-at-point continue</span>
+        (<span style="color: #5317ac; font-weight: bold;">if</span> (not (file-exists-p file))
+            (<span style="color: #813e00; font-weight: bold;">user-error</span> (concat <span style="color: #2544bb;">"Target file not found; Use "</span>
+                                (substitute-command-keys <span style="color: #2544bb;">"\\[</span><span style="color: #0000c0;">/olr-transient</span><span style="color: #2544bb;">]"</span>)
+                                <span style="color: #2544bb;">" to repair link to %s"</span>) <span style="color: #813e00; font-weight: bold;">file))))))</span>
+
+(add-hook 'org-open-at-point-functions #'/org-test-file-link)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org697ba4d" class="outline-2">
+<h2 id="org697ba4d">A Transient Menu for Link Repair Tasks</h2>
+<div class="outline-text-2" id="text-org697ba4d">
+<p>
+I am using Emacs’ Transient library (the same engine behind Magit’s menus) to create a one-stop menu for all <code>Org Link Repair</code> activities. The command <code>/olr-transient</code> is a prefix command that, when invoked, pops up a transient menu with several relevant actions. This spares me from memorizing multiple separate commands or key bindings. I just hit one key sequence to get the menu, then select what I need. Here’s my initial definition of the transient menu:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-emacs-lisp">(<span style="color: #5317ac; font-weight: bold;">transient-define-prefix</span> <span style="color: #721045;">/olr-transient</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Transient menu for Org Link Repair."</span>
+  [<span style="color: #8f0075; font-weight: bold;">:description</span> <span style="color: #2544bb;">"Org Link Repair transient: fix your broken links\n\n"</span>
+   [<span style="color: #2544bb;">"Test/Repair"</span>
+    (<span style="color: #2544bb;">"l"</span> <span style="color: #2544bb;">"Lint all links in the buffer"</span> /org-lint-links <span style="color: #8f0075; font-weight: bold;">:transient</span> nil)
+    (<span style="color: #2544bb;">"m"</span> <span style="color: #2544bb;">"Manually find the new target"</span> /olr-manual-mode <span style="color: #8f0075; font-weight: bold;">:transient</span> nil)]
+   [<span style="color: #2544bb;">"Display/Navigate"</span>
+    (<span style="color: #2544bb;">"n"</span> <span style="color: #2544bb;">"Next link"</span> org-next-link <span style="color: #8f0075; font-weight: bold;">:transient</span> t)
+    (<span style="color: #2544bb;">"p"</span> <span style="color: #2544bb;">"Previous link"</span> org-previous-link <span style="color: #8f0075; font-weight: bold;">:transient</span> t)
+    (<span style="color: #2544bb;">"d"</span> <span style="color: #2544bb;">"Display toggle"</span> org-toggle-link-display <span style="color: #8f0075; font-weight: bold;">:transient</span> t)]
+   [<span style="color: #2544bb;">"Other"</span>
+    (<span style="color: #2544bb;">"q"</span> <span style="color: #2544bb;">"Quit"</span> transient-quit-one <span style="color: #8f0075; font-weight: bold;">:transient</span> nil)]])
+
+(global-set-key (kbd <span style="color: #2544bb;">"&lt;f2&gt; &lt;return&gt;"</span>) #'/olr-transient)
+</pre>
+</div>
+
+<p>
+The manual repair strategy is the only one offered for now. The menu also offers linting the links in the current buffer (I have a customized version of the built-in <code>org-lint</code> for that), link navigation and display toggling commands.
+</p>
+
+<p>
+Using a transient menu here feels like overkill for just a few commands, but I anticipate adding more link-related utilities over time. Even now, it’s nice to have a single “hub” for link management. I don’t use it every day, but when I suspect there might be broken links, I know where to go. It’s also convenient when a broken link does pop up unexpectedly.  I can quickly bring up this menu and choose to repair it on the spot.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org9ec04b3" class="outline-2">
+<h2 id="org9ec04b3">Manual Repair Strategy &#x2014; Guided Link Fixing</h2>
+<div class="outline-text-2" id="text-org9ec04b3">
+<p>
+This is the most general strategy which is why I implemented it first. The tradeoff is that it relies on the user knowing where the intended link target is and navigating to it. I found that I usually remember what happened to my abandoned Org files, even after years of not visiting them. I can usually recover them from an old archive, or one of my no-longer-used Dropbox accounts.
+</p>
+
+<p>
+The strategy implements a global minor mode and a set of functions to initiate the repair flow and to complete it. When the user chooses to use this strategy, the code remembers the current location (the location of the broken link) and activates the <code>/olr-manual-mode</code> minor mode while the user is free to do whatever they need to locate the correct target org file and a headline. A mode line lighter provides a visual clue that the repair flow is in progress. Once the target has been located, the user would hit <code>C-c C-c</code> to complete the repair, which will interpret the current point as the intended link target. The code will replace the broken link at the starting location with the new link. The user is free to abandon the flow at any time with <code>C-c C-k</code>.
+</p>
+
+<p>
+Here is my code:
+</p>
+<div class="org-src-container">
+<pre class="src src-emacs-lisp"><span style="color: #505050; font-style: italic;">;; </span>
+<span style="color: #505050; font-style: italic;">;;; </span><span style="color: #505050; font-style: italic;">Org Link Repair - Manual (user-assisted) Strategy</span>
+<span style="color: #505050; font-style: italic;">;; </span>
+(<span style="color: #5317ac; font-weight: bold;">defvar</span> <span style="color: #00538b;">/olr-manual-marker</span> nil
+  <span style="color: #2a486a; font-style: italic;">"Marker pointing at the original (broken) link."</span>)
+
+(<span style="color: #5317ac; font-weight: bold;">defvar</span> <span style="color: #00538b;">/olr-manual-mode-map</span>
+  (<span style="color: #5317ac; font-weight: bold;">let</span> ((map (make-sparse-keymap)))
+    (define-key map (kbd <span style="color: #2544bb;">"C-c C-c"</span>) #'/olr-manual-complete)
+    (define-key map (kbd <span style="color: #2544bb;">"C-c C-k"</span>) #'/olr-manual-abort)
+    map)
+  <span style="color: #2a486a; font-style: italic;">"Keymap for `</span><span style="color: #0000c0; font-style: italic;">/olr-manual-mode</span><span style="color: #2a486a; font-style: italic;">'."</span>)
+
+(<span style="color: #5317ac; font-weight: bold;">easy-menu-define</span> /olr-manual-mode-menu /olr-manual-mode-map
+  <span style="color: #2a486a; font-style: italic;">"Menu for OLR Manual Mode"</span>
+  '(<span style="color: #2544bb;">"OrgLinkRepairManualMode"</span>
+    [<span style="color: #2544bb;">"Complete"</span> /olr-manual-complete t]
+    [<span style="color: #2544bb;">"Abort"</span> /olr-manual-abort t]))
+
+(<span style="color: #5317ac; font-weight: bold;">define-minor-mode</span> <span style="color: #721045;">/olr-manual-mode</span>
+  <span style="color: #2a486a; font-style: italic;">"Global minor mode for Org Link Repair manual strategy.</span>
+<span style="color: #2a486a; font-style: italic;">When enabled, the marker pointing at the link at point is saved.  The user</span>
+<span style="color: #2a486a; font-style: italic;">is expected to navigate to where the link should be pointing at and call</span>
+<span style="color: #2a486a; font-style: italic;">`</span><span style="color: #0000c0; font-style: italic;">/olr-manual-complete</span><span style="color: #2a486a; font-style: italic;">' to repair the link, or `</span><span style="color: #0000c0; font-style: italic;">/olr-manual-abort</span><span style="color: #2a486a; font-style: italic;">' to cancel.</span>
+<span style="color: #2a486a; font-style: italic;">Attempting to enable this minor mode outside an Org-mode derivative, or</span>
+<span style="color: #2a486a; font-style: italic;">if the point is not at an Org link will fail with a user error."</span>
+  <span style="color: #8f0075; font-weight: bold;">:lighter</span> <span style="color: #2544bb;">" LinkRepair"</span>
+  <span style="color: #8f0075; font-weight: bold;">:global</span> t
+
+  (<span style="color: #5317ac; font-weight: bold;">if</span> (not /olr-manual-mode)
+      (<span style="color: #5317ac; font-weight: bold;">setq</span> /olr-manual-marker nil)
+    (<span style="color: #5317ac; font-weight: bold;">unless</span> (derived-mode-p 'org-mode)
+      (<span style="color: #813e00; font-weight: bold;">user-error</span> <span style="color: #2544bb;">"Not in an Org buffer"</span>))
+    (<span style="color: #5317ac; font-weight: bold;">unless</span> (eq (org-element-type (org-element-context)) 'link)
+      (<span style="color: #813e00; font-weight: bold;">user-error</span> <span style="color: #2544bb;">"Not at an Org link"</span>))
+    (<span style="color: #5317ac; font-weight: bold;">setq</span> /olr-manual-marker (point-marker))
+    (message
+     (substitute-command-keys
+      <span style="color: #2544bb;">"Manual link repair mode initiated.  Navigate to intended link target,</span>
+<span style="color: #2544bb;">press \\[</span><span style="color: #0000c0;">/olr-manual-complete</span><span style="color: #2544bb;">] to complete, or \\[</span><span style="color: #0000c0;">/olr-manual-abort</span><span style="color: #2544bb;">] to abort."</span>
+      ))))
+
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/olr-manual-complete</span> ()
+   <span style="color: #2a486a; font-style: italic;">"Complete Org Link Repair by replacing the broken link at saved marker</span>
+<span style="color: #2a486a; font-style: italic;">with a new link targeted at point.</span>
+<span style="color: #2a486a; font-style: italic;">The user is expected to have navigated to the location of the new link target.</span>
+<span style="color: #2a486a; font-style: italic;">This function will call `</span><span style="color: #0000c0; font-style: italic;">org-store-link</span><span style="color: #2a486a; font-style: italic;">', then use `</span><span style="color: #0000c0; font-style: italic;">org-insert-all-links</span><span style="color: #2a486a; font-style: italic;">' to</span>
+<span style="color: #2a486a; font-style: italic;">replace the broken link, location of which was saved by `</span><span style="color: #0000c0; font-style: italic;">/olr-manual-mode</span><span style="color: #2a486a; font-style: italic;">'."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span>)
+  (org-store-link nil t)
+  (<span style="color: #5317ac; font-weight: bold;">unless</span> (<span style="color: #5317ac; font-weight: bold;">and</span> /olr-manual-marker (marker-position /olr-manual-marker))
+    (<span style="color: #813e00; font-weight: bold;">error</span> <span style="color: #2544bb;">"OrgLinkRepair: Lost marker to the original link location"</span>))
+  (switch-to-buffer (marker-buffer /olr-manual-marker))
+  (goto-char (marker-position /olr-manual-marker))
+  (/olr-manual-mode -1)
+  (<span style="color: #5317ac; font-weight: bold;">let*</span> ((oldctx (org-element-context))
+         (oldstart (org-element-property <span style="color: #8f0075; font-weight: bold;">:begin</span> oldctx))
+         (oldend (org-element-property <span style="color: #8f0075; font-weight: bold;">:end</span> oldctx))
+         oldlink newlink)
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Delete the old link at point</span>
+    (<span style="color: #5317ac; font-weight: bold;">when</span> (<span style="color: #5317ac; font-weight: bold;">and</span> oldstart oldend)
+      (<span style="color: #5317ac; font-weight: bold;">setq</span> oldlink (buffer-substring oldstart oldend))
+      (delete-region oldstart oldend))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Insert the new link</span>
+    (org-insert-all-links 1 <span style="color: #2544bb;">""</span> <span style="color: #2544bb;">""</span>)
+    (<span style="color: #5317ac; font-weight: bold;">let*</span> ((newctx (org-element-context))
+           (newstart (org-element-property <span style="color: #8f0075; font-weight: bold;">:begin</span> newctx))
+           (newend (org-element-property <span style="color: #8f0075; font-weight: bold;">:end</span> newctx)))
+      (goto-char newstart)
+      (<span style="color: #5317ac; font-weight: bold;">setq</span> newlink (buffer-substring newstart newend)))
+    <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Notify the user: audibly+visibly (hopefully after auto-revert messages)</span>
+    (ding)
+    (run-with-idle-timer
+     0.2 nil
+     (<span style="color: #5317ac; font-weight: bold;">lambda</span> () (message (concat <span style="color: #2544bb;">"Modified buffer by replacing link %s with %s."</span>
+                            <span style="color: #2544bb;">"\nSave the buffer to keep changes!"</span>)
+                    oldlink newlink)))))
+
+(<span style="color: #5317ac; font-weight: bold;">defun</span> <span style="color: #721045;">/olr-manual-abort</span> ()
+  <span style="color: #2a486a; font-style: italic;">"Abort manual Org Link Repair."</span>
+  (<span style="color: #5317ac; font-weight: bold;">interactive</span>)
+  (<span style="color: #5317ac; font-weight: bold;">unless</span> (<span style="color: #5317ac; font-weight: bold;">and</span> /olr-manual-marker (marker-position /olr-manual-marker))
+    (<span style="color: #813e00; font-weight: bold;">error</span> <span style="color: #2544bb;">"OrgLinkRepair: Lost marker to the original link location"</span>))
+  (switch-to-buffer (marker-buffer /olr-manual-marker))
+  (goto-char (marker-position /olr-manual-marker))
+  (/olr-manual-mode -1)
+  <span style="color: #505050; font-style: italic;">;; </span><span style="color: #505050; font-style: italic;">Notify the user</span>
+  (message <span style="color: #2544bb;">"Org Link Repair aborted."</span>))
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgec2fe8e" class="outline-2">
+<h2 id="orgec2fe8e">Limitations and Next Steps</h2>
+<div class="outline-text-2" id="text-orgec2fe8e">
+<p>
+Not a Complete Solution: This toolkit currently provides early interception for broken file links only. It could be extended to catch other link types if doing it early would be beneficial. For example opening web links may pop a browser window, which is annoying if we could know ahead of time that it will fail. The manual repair strategy will work for any link type, as long as it is supported by <code>org-store-link</code>. Again, not for web links opened in a browser.
+</p>
+
+<p>
+Manual Effort: While the repair mode makes fixing easier, it’s still a manual process. I have to find the new targets or decide to remove links. There’s room for automation, e.g. suggesting likely new locations for a file (perhaps by searching for a filename in a known directory). At the moment, I actually prefer the manual control, but smarter suggestions could speed things up.
+</p>
+
+<p>
+Workflow UX: I experimented with making a nicer user experience during the manual link repair workflow. I wanted to make it visually clear that the user is in the workflow and is expected to either complete it or abort it. The global minor mode lighter in the mode line doesn't seem to be enough. I tried sticking a header-line at the top, displaying a banner message and key bindings to complete/abort, but it was not reliable, and didn't look great either. I have some other ideas to try, but if you have a suggestion please let me know.
+</p>
+
+<p>
+Despite these limitations, the gain in convenience has been huge for me. I can freely rename files or reorganize headings, knowing that if I forget to update a reference, Emacs will help me catch it later. And fixing it is straightforward. This is a relatively small addition to my Emacs config (just a few dozen lines of Elisp), but it solves an annoying real problem that used to steal time and momentum. And by the way, I do have LLM generated test cases for this code (see <a href="https://spepo.github.io/2025-04-30-towards-auto-generated-ert-unit-tests.html">my previous blog post</a>).
+</p>
+
+<blockquote>
+<p>
+Enjoy the malleability of Emacs and the freedom it gives you!
+</p>
+</blockquote>
+</div>
+</div>
+<div class="taglist"><a href="https://spepo.github.io/tags.html">Tags</a>: <a href="https://spepo.github.io/tag-emacs.html">emacs</a> </div>
 <div class="post-date">30 Apr 2025</div><h1 class="post-title"><a href="https://spepo.github.io/2025-04-30-towards-auto-generated-ert-unit-tests.html">Towards Auto-Generated ERT Unit Tests</a></h1>
 <p>
 Rigorous testing clearly benefits software projects, yet many Emacs Lisp packages have minimal tests. You might think manual testing during development is enough&#x2014;but that only works if the code never changes and has no evolving dependencies. Automated tests, however, give you the confidence to modify code without fear of unintentionally breaking functionality. They quickly catch issues caused by changing dependencies, and coverage tools highlight tested and untested functionality.
